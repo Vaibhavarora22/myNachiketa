@@ -33,7 +33,6 @@ const ProfilePage = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Determine which user to fetch based on URL or default
     const userToFetch = urlUsername || 'DrNykterstein';
     
     const fetchUserData = async () => {
@@ -43,12 +42,15 @@ const ProfilePage = () => {
 
       try {
         const response = await fetch(`https://lichess.org/api/user/${userToFetch}`);
+        
+        // This is the error handling logic
         if (!response.ok) {
-          if(response.status === 404) {
-            throw new Error('User not found. Please check the username.');
+          if (response.status === 404) {
+            throw new Error('User not found. Please check the username and try again.');
           }
           throw new Error('Something went wrong fetching the user data.');
         }
+
         const data = await response.json();
         setUserData(data);
       } catch (err) {
@@ -59,13 +61,12 @@ const ProfilePage = () => {
     };
 
     fetchUserData();
-    setSearchInput(userToFetch); // Sync search input with the user being displayed
-  }, [urlUsername]); // Re-run this effect whenever the username in the URL changes
+    setSearchInput(userToFetch);
+  }, [urlUsername]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (searchInput) {
-      // Navigate to the new URL, which triggers the useEffect to fetch data
       navigate(`/profile/${searchInput}`);
     }
   };
@@ -93,6 +94,7 @@ const ProfilePage = () => {
       
       {userData && (
         <div className="bg-gray-900 shadow-2xl rounded-xl p-6 max-w-2xl mx-auto animate-fade-in-up">
+            {/* User data rendering remains the same */}
             <div className="flex flex-col sm:flex-row items-center gap-6">
                 <div className="flex-shrink-0 relative">
                     <div className="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center text-4xl font-bold text-teal-400 border-4 border-gray-700">
@@ -137,3 +139,4 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
+
