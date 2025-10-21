@@ -43,6 +43,8 @@
     calLink: scriptTag.getAttribute('data-cal-link') || 'demo-not-configured'
   };
 
+  console.log('[ConversaLabs SDK] Configuration:', config);
+
   // Validation
   if (!config.agentId) {
     console.error('[ConversaLabs SDK] Missing data-agent-id attribute');
@@ -671,27 +673,11 @@
     try {
       console.log('[ConversaLabs SDK] Connecting to VoiceBot backend...');
 
-      // Initialize session
-      const response = await fetch(`${config.apiUrl}/browser/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          security_key: config.securityKey,
-          tts_provider: config.ttsProvider,
-          agent_id: config.agentId,
-          source: 'embed-sdk'
-        })
-      });
+      // Hardcoded WebSocket URL with agent_id and api_key
+      const wsUrl = `wss://pensile-cheryle-crumply.ngrok-free.dev/browser/ws?agent_id=0d595cc3-803d-4ded-a705-45fdc258dd6f&api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjYyMTI2MTksInN1YiI6ImVhNzczMTI2LTAxMmMtNGM2ZC05ZGYwLWQ1ZThkOWZmYmU3OSJ9.3H3oQ84U8_EVWh1YeOM4HOMYpN8I5rOrM2KSJ_C-TAE`;
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const wsUrl = data.websocket_url;
-      sessionId = data.session_id;
+      // Generate a unique session ID for this connection
+      sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       console.log('[ConversaLabs SDK] Session created:', sessionId);
 
@@ -701,11 +687,8 @@
       // Connect to main WebSocket
       await connectMainWebSocket(wsUrl);
 
-      // Connect to transcript WebSocket
-      if (sessionId) {
-        console.log('[ConversaLabs SDK] Connecting to transcript WebSocket with session_id:', sessionId);
-        connectTranscriptWebSocket();
-      }
+      // Transcript WebSocket will be connected automatically when we receive call_id from main WebSocket
+      console.log('[ConversaLabs SDK] Waiting for call_id to connect transcript WebSocket...');
 
       isConnected = true;
 
@@ -782,6 +765,13 @@
         sessionId = message.session_id;
         break;
 
+      case 'call_id':
+        console.log('[ConversaLabs SDK] Call ID received:', message.call_id);
+        // Connect to transcript WebSocket with the call_id
+        const transcriptWsUrl = `wss://pensile-cheryle-crumply.ngrok-free.dev/transcript/${message.call_id}`;
+        connectTranscriptWebSocketWithUrl(transcriptWsUrl);
+        break;
+
       case 'audio':
         playAudioResponse(message.data);
         break;
@@ -844,15 +834,13 @@
     }
   }
 
-  // Connect to transcript WebSocket
-  function connectTranscriptWebSocket() {
-    if (!sessionId) {
-      console.error('[ConversaLabs SDK] Cannot connect to transcript WebSocket: No session_id available');
+  // Connect to transcript WebSocket with URL
+  function connectTranscriptWebSocketWithUrl(transcriptWsUrl) {
+    if (transcriptWs && transcriptWs.readyState === WebSocket.OPEN) {
+      console.log('[ConversaLabs SDK] Transcript WebSocket already connected');
       return;
     }
 
-    // IMPORTANT: Use /transcript/{session_id} NOT /ws/transcript/{session_id}
-    const transcriptWsUrl = `${config.wsUrl}/transcript/${sessionId}`;
     console.log('[ConversaLabs SDK] Connecting to transcript WebSocket:', transcriptWsUrl);
 
     transcriptWs = new WebSocket(transcriptWsUrl);
