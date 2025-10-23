@@ -726,7 +726,7 @@
 
       console.log('[ConversaLabs SDK] WebSocket URL:', wsUrl);
       console.log('[ConversaLabs SDK] Transcript WS Base URL:', transcriptWsBaseUrl);
-      console.log('[ConversaLabs SDK] Session ID:', sessionId);
+      console.log('[ConversaLabs SDK] Session ID from /browser/start:', sessionId);
 
       // Initialize microphone
       await initializeMicrophone();
@@ -734,8 +734,10 @@
       // Connect to main WebSocket
       await connectMainWebSocket(wsUrl);
 
-      // Transcript WebSocket will be connected automatically when we receive call_id from main WebSocket
-      console.log('[ConversaLabs SDK] Waiting for call_id to connect transcript WebSocket...');
+      // Connect to transcript WebSocket immediately using session_id from /browser/start
+      const transcriptWsUrl = `${transcriptWsBaseUrl}/transcript/${sessionId}`;
+      console.log('[ConversaLabs SDK] Connecting to transcript WebSocket:', transcriptWsUrl);
+      connectTranscriptWebSocketWithUrl(transcriptWsUrl);
 
       isConnected = true;
 
@@ -808,16 +810,9 @@
 
     switch (message.type) {
       case 'session_id':
-        console.log('[ConversaLabs SDK] Session confirmed:', message.session_id);
-        sessionId = message.session_id;
-        break;
-
-      case 'call_id':
-        console.log('[ConversaLabs SDK] Call ID received:', message.call_id);
-        // Connect to transcript WebSocket with the call_id using URL from response
-        const transcriptWsUrl = `${transcriptWsBaseUrl}/transcript/${message.call_id}`;
-        console.log('[ConversaLabs SDK] Connecting to transcript WebSocket:', transcriptWsUrl);
-        connectTranscriptWebSocketWithUrl(transcriptWsUrl);
+        console.log('[ConversaLabs SDK] Session ID from WebSocket:', message.session_id);
+        // Note: This is a different session_id from the one in /browser/start response
+        // We use the session_id from /browser/start for transcript WebSocket
         break;
 
       case 'audio':
