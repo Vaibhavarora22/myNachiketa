@@ -33,21 +33,29 @@
 
   // Configuration from script tag attributes
   const scriptTag = document.currentScript;
+  const apiUrl = scriptTag.getAttribute('data-api-url') || 'http://localhost:7860';
+
+  // Automatically convert HTTP/HTTPS to WS/WSS
+  const wsUrl = apiUrl.replace(/^http/, 'ws');
+
   const config = {
     agentId: scriptTag.getAttribute('data-agent-id'),
-    securityKey: scriptTag.getAttribute('data-security-key') || 'default-embed-key',
-    ttsProvider: scriptTag.getAttribute('data-tts-provider') || 'elevenlabs',
-    apiUrl: scriptTag.getAttribute('data-api-url') || 'http://localhost:7860',
-    wsUrl: scriptTag.getAttribute('data-ws-url') || 'ws://localhost:7860',
-    agentImage: scriptTag.getAttribute('data-agent-image') || 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=200&h=200&fit=crop&crop=faces',
-    calLink: scriptTag.getAttribute('data-cal-link') || 'demo-not-configured'
+    apiKey: scriptTag.getAttribute('data-api-key'),
+    apiUrl: apiUrl,
+    wsUrl: wsUrl
   };
 
   console.log('[ConversaLabs SDK] Configuration:', config);
+  console.log('[ConversaLabs SDK] Auto-generated WebSocket URL:', wsUrl);
 
   // Validation
   if (!config.agentId) {
     console.error('[ConversaLabs SDK] Missing data-agent-id attribute');
+    return;
+  }
+
+  if (!config.apiKey) {
+    console.error('[ConversaLabs SDK] Missing data-api-key attribute');
     return;
   }
 
@@ -56,6 +64,7 @@
   let transcriptWs = null;
   let isConnected = false;
   let sessionId = null;
+  let transcriptWsBaseUrl = null; // Store transcript WebSocket base URL from response
   let audioStream = null;
   let audioContext = null;
   let audioProcessor = null;
@@ -673,13 +682,51 @@
     try {
       console.log('[ConversaLabs SDK] Connecting to VoiceBot backend...');
 
-      // Hardcoded WebSocket URL with agent_id and api_key
-      const wsUrl = `wss://pensile-cheryle-crumply.ngrok-free.dev/browser/ws?agent_id=0d595cc3-803d-4ded-a705-45fdc258dd6f&api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NjYyMTI2MTksInN1YiI6ImVhNzczMTI2LTAxMmMtNGM2ZC05ZGYwLWQ1ZThkOWZmYmU3OSJ9.3H3oQ84U8_EVWh1YeOM4HOMYpN8I5rOrM2KSJ_C-TAE`;
+      // Fetch WebSocket URL from /browser/start endpoint
+      const startEndpoint = `${config.apiUrl}/browser/start`;
+      console.log('[ConversaLabs SDK] Fetching WebSocket URL from:', startEndpoint);
 
-      // Generate a unique session ID for this connection
-      sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const response = await fetch(startEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          agent_id: config.agentId,
+          api_key: config.apiKey
+        })
+      });
 
-      console.log('[ConversaLabs SDK] Session created:', sessionId);
+      if (!response.ok) {
+        throw new Error(`Failed to start session: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('[ConversaLabs SDK] Session started:', data);
+
+      const wsUrl = data.websocket_url;
+      sessionId = data.session_id;
+
+      // Extract transcript WebSocket base URL from response or fallback to config.wsUrl
+      if (data.transcript_ws_url) {
+        transcriptWsBaseUrl = data.transcript_ws_url;
+      } else {
+        // Fallback: use configured wsUrl or extract from main WebSocket URL
+        if (config.wsUrl) {
+          transcriptWsBaseUrl = config.wsUrl;
+        } else {
+          const wsUrlObj = new URL(wsUrl);
+          transcriptWsBaseUrl = `${wsUrlObj.protocol}//${wsUrlObj.host}`;
+        }
+      }
+
+      if (!wsUrl) {
+        throw new Error('No WebSocket URL received from server');
+      }
+
+      console.log('[ConversaLabs SDK] WebSocket URL:', wsUrl);
+      console.log('[ConversaLabs SDK] Transcript WS Base URL:', transcriptWsBaseUrl);
+      console.log('[ConversaLabs SDK] Session ID:', sessionId);
 
       // Initialize microphone
       await initializeMicrophone();
@@ -767,8 +814,9 @@
 
       case 'call_id':
         console.log('[ConversaLabs SDK] Call ID received:', message.call_id);
-        // Connect to transcript WebSocket with the call_id
-        const transcriptWsUrl = `wss://pensile-cheryle-crumply.ngrok-free.dev/transcript/${message.call_id}`;
+        // Connect to transcript WebSocket with the call_id using URL from response
+        const transcriptWsUrl = `${transcriptWsBaseUrl}/transcript/${message.call_id}`;
+        console.log('[ConversaLabs SDK] Connecting to transcript WebSocket:', transcriptWsUrl);
         connectTranscriptWebSocketWithUrl(transcriptWsUrl);
         break;
 
