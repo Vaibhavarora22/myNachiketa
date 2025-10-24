@@ -704,8 +704,12 @@
       const data = await response.json();
       console.log('[ConversaLabs SDK] Session started:', data);
 
-      const wsUrl = data.websocket_url;
       sessionId = data.session_id;
+
+      // Construct WebSocket URL from apiUrl instead of using backend's localhost URL
+      const apiUrlObj = new URL(config.apiUrl);
+      const wsProtocol = apiUrlObj.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${apiUrlObj.host}/browser/ws?session_id=${sessionId}`;
 
       // Extract transcript WebSocket base URL from response or fallback to config.wsUrl
       if (data.transcript_ws_url) {
